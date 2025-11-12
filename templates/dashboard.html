@@ -1,13 +1,13 @@
-{% extends "layout.html" %}
-{% block title %}Dashboard do Opala Systems{% endblock %}
+{% extends "base.html" %}
+{% block title %}Dashboard - Opala Systems{% endblock %}
 {% block content %}
     <div class="content-section">
         {# NOVO: Usando a classe main-content-title para o título da página #}
-        <div class="main-content-title">Dashboard do Sistema de Irrigação</div>
+        <div class="main-content-title">Dashboard - Opala Systems</div>
         <p><strong>Horário Atual:</strong> {{ horario_atual }}</p>
-        <p><strong>Status da Rega:</strong> {{ status }}</p>
-        {% if status == 'Regando agora!' %}
-            <p><strong>Duração da Rega:</strong> {{ duracao }} minutos</p>
+        <p><strong>Status:</strong> {{ status }}</p>
+        {% if duracao > 0 %}
+        <p><strong>Duração da Rega:</strong> {{ duracao }} minutos</p>
         {% endif %}
         <hr>
         <p><strong>Total de Horários Cadastrados:</strong> {{ total_horarios }}</p>
@@ -15,3 +15,4 @@
         <!-- Adicione mais informações ou gráficos aqui -->
     </div>
 {% endblock content %}
+

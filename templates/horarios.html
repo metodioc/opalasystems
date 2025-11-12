@@ -1,9 +1,9 @@
-{% extends "layout.html" %}
-{% block title %}Meus Horários{% endblock %}
+{% extends "base.html" %}
+{% block title %}Meus Horários - Opala Systems{% endblock %}
 {% block content %}
     <div class="content-section">
         {# NOVO: Usando a classe main-content-title para o título da página #}
-        <div class="main-content-title">Meus Horários de Rega</div>
+        <div class="main-content-title">Meus Horários de Rega - Opala Systems</div>
         {% if horarios %}
             <ul class="list-group">
                 {% for horario in horarios %}
@@ -35,7 +35,6 @@
         {% else %}
             <p>Nenhum horário de rega cadastrado ainda. Adicione um!</p>
         {% endif %}
-
         <!-- Botão para Adicionar Horário (abre um modal) -->
         <div class="mt-3 text-center">
             <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalNovoHorario">
@@ -43,7 +42,6 @@
             </button>
         </div>
     </div>
-
     <!-- MODAL para Adicionar Horário (mantido do código anterior) -->
     <div class="modal fade" id="modalNovoHorario" tabindex="-1" aria-labelledby="novoHorarioLabel" aria-hidden="true">
         <div class="modal-dialog">
@@ -62,95 +60,128 @@
                         <div class="mb-3">
                             <label for="novaDuracao" class="form-label">Duração (minutos)</label>
                             <input type="number" class="form-control" id="novaDuracao" name="duracao" min="1" max="1440" placeholder="10" required>
-                            <small class="form-text text-muted">Duração da rega em minutos (1 a 1440).</small>
+                            <small class="form-text text-muted">Duração da rega em minutos</small>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Dias da Semana</label><br>
-                            {% for dia in ['Seg','Ter','Qua','Qui','Sex','Sab','Dom'] %}
-                                <div class="form-check form-check-inline">
-                                    <input class="form-check-input" type="checkbox" id="novoDia_{{ dia }}" value="{{ dia }}">
-                                    <label class="form-check-label" for="novoDia_{{ dia }}">{{ dia }}</label>
+                            <label class="form-label">Dias da Semana</label>
+                            <div class="row">
+                                <div class="col">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="dias" value="Seg" id="seg" checked>
+                                        <label class="form-check-label" for="seg">Seg</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="dias" value="Ter" id="ter">
+                                        <label class="form-check-label" for="ter">Ter</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="dias" value="Qua" id="qua">
+                                        <label class="form-check-label" for="qua">Qua</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="dias" value="Qui" id="qui">
+                                        <label class="form-check-label" for="qui">Qui</label>
+                                    </div>
                                 </div>
-                            {% endfor %}
+                                <div class="col">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="dias" value="Sex" id="sex" checked>
+                                        <label class="form-check-label" for="sex">Sex</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="dias" value="Sab" id="sab">
+                                        <label class="form-check-label" for="sab">Sáb</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="dias" value="Dom" id="dom">
+                                        <label class="form-check-label" for="dom">Dom</label>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </form>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-success" onclick="salvarNovoHorario()">Salvar</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                    <button type="button" class="btn btn-primary" onclick="salvarNovoHorario()">Salvar</button>
                 </div>
             </div>
         </div>
     </div>
-
-    <!-- Seus scripts JavaScript para deletar/ativar horários (e o novo para adicionar) -->
     <script>
-        function deletarHorario(id) {
-            if (confirm('Tem certeza que deseja deletar este horário?')) {
-                fetch(`/deletar_horario/${id}`, {
-                    method: 'DELETE',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.sucesso) {
-                        window.location.reload(); // Recarrega a página para atualizar a lista
-                    } else {
-                        alert('Erro ao deletar horário: ' + data.erro);
-                    }
-                })
-                .catch(error => console.error('Erro:', error));
-            }
-        }
-
-        function toggleAtivo(id, novoStatus) {
-            fetch(`/ativar_horario/${id}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ ativo: novoStatus })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.sucesso) {
-                    window.location.reload(); // Recarrega a página para atualizar a lista
-                } else {
-                    alert('Erro ao atualizar status: ' + data.erro);
-                }
-            })
-            .catch(error => console.error('Erro:', error));
-        }
-
-        // Função para salvar um novo horário via modal
         function salvarNovoHorario() {
+            const form = document.getElementById('formNovoHorario');
+            if (!form.checkValidity()) {
+                form.reportValidity();
+                return;
+            }
             const hora = document.getElementById('novaHora').value;
             const duracao = document.getElementById('novaDuracao').value;
-            const diasSelecionados = [];
-            document.querySelectorAll('#formNovoHorario input[type=checkbox]:checked').forEach(c => diasSelecionados.push(c.value));
-            
+            const diasChecks = document.querySelectorAll('input[name="dias"]:checked');
+            const dias = Array.from(diasChecks).map(d => d.value).join(',');
+            if (!dias) {
+                alert('Selecione pelo menos um dia da semana.');
+                return;
+            }
             fetch('/adicionar_horario', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    hora: hora,
-                    duracao: duracao,
-                    dias_semana: diasSelecionados.join(',')
-                })
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ hora, duracao, dias })
             })
             .then(response => response.json())
             .then(data => {
                 if (data.sucesso) {
-                    location.reload();
+                    window.location.reload();
                 } else {
-                    alert('Erro ao adicionar horário: ' + data.erro);
+                    alert('Erro: ' + data.erro);
                 }
             })
-            .catch(err => {
-                console.error('Erro:', err);
-                alert('Ocorreu um erro ao tentar adicionar o horário.');
+            .catch(error => {
+                console.error('Erro ao salvar horário:', error);
+                alert('Erro ao salvar horário.');
+            });
+        }
+
+        function deletarHorario(id) {
+            if (!confirm('Tem certeza que deseja excluir este horário?')) return;
+            fetch('/deletar_horario/' + id, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.sucesso) {
+                    window.location.reload();
+                } else {
+                    alert('Erro: ' + data.erro);
+                }
+            })
+            .catch(error => {
+                console.error('Erro ao deletar horário:', error);
+                alert('Erro ao deletar horário.');
+            });
+        }
+
+        function toggleAtivo(id, novoEstado) {
+            fetch('/ativar_horario/' + id, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ ativo: novoEstado })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.sucesso) {
+                    window.location.reload();
+                } else {
+                    alert('Erro: ' + data.erro);
+                }
+            })
+            .catch(error => {
+                console.error('Erro ao atualizar status:', error);
+                alert('Erro ao atualizar status.');
             });
         }
     </script>
