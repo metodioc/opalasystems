@@ -353,3 +353,7 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
 
+@app.route('/leitura_gabaritos')
+@login_required
+def leitura_gabaritos():
+    return render_template('leitura_gabaritos.html', title='Leitura de Gabaritos')

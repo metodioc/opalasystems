@@ -655,3 +655,12 @@ body {
 .login-footer a:hover {
     text-decoration: underline;
 }
+
+.menu-category {
+    font-weight: bold;
+    color: #555;
+    margin-top: 15px;
+    margin-bottom: 5px;
+    padding-left: 10px;
+    border-left: 3px solid #4CAF50;
+}

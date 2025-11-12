@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Sistema de Irrigação{% endblock %}</title>
+    <title>{% block title %}Opala Systems{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -12,17 +12,16 @@
     <button id="sidebar-toggle" class="sidebar-toggle">
         <i class="fas fa-bars"></i>
     </button>
-
     <!-- Sidebar Overlay -->
     <div id="sidebar-overlay" class="sidebar-overlay"></div>
-
     <!-- Sidebar -->
     <nav id="sidebar" class="sidebar">
         <div class="sidebar-header">
-            <h3 class="sidebar-title">🌱 Irrigação</h3>
+           h3 class="sidebar-title">🌱 Opala Systems</h3>
         </div>
         <ul class="sidebar-menu">
             {% if current_user.is_authenticated %}
+                <li class="menu-category">Sistema de Irrigação</li>
                 <li>
                     <a href="{{ url_for('dashboard') }}" class="{% if request.endpoint == 'dashboard' %}active{% endif %}">
                         <i class="fas fa-tachometer-alt"></i> Dashboard
@@ -36,6 +35,12 @@
                 <li>
                     <a href="{{ url_for('status_api') }}" target="_blank">
                         <i class="fas fa-plug"></i> API Status
+                    </a>
+                </li>
+                <li class="menu-category">Leitura de Arquivos</li>
+                <li>
+                    <a href="{{ url_for('leitura_gabaritos') }}" class="{% if request.endpoint == 'leitura_gabaritos' %}active{% endif %}">
+                        <i class="fas fa-file-alt"></i> Leitura de Gabaritos
                     </a>
                 </li>
                 <li>
@@ -52,13 +57,12 @@
             {% endif %}
         </ul>
     </nav>
-
     <!-- Header -->
     <header class="header">
         <div class="header-content">
             <h1 class="header-title">
                 <i class="fas fa-seedling"></i>
-                Sistema de Irrigação
+                Opala Systems
             </h1>
             {% if current_user.is_authenticated %}
                 <div class="user-info">
@@ -68,7 +72,6 @@
             {% endif %}
         </div>
     </header>
-
     <!-- Main Content -->
     <main id="main-content" class="main-content">
         <!-- Flash Messages -->
@@ -83,11 +86,9 @@
                 {% endfor %}
             {% endif %}
         {% endwith %}
-
         <!-- Page Content -->
         {% block content %}{% endblock %}
     </main>
-
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>
