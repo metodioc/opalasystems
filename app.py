@@ -111,19 +111,28 @@ def index():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
     if request.method == 'POST':
         email = request.form.get('email')
-        senha = request.form.get('senha')
-        usuario = Usuario.query.filter(email=email).first()
-        if usuario and usuario.check_senha(senha):
+        senha = request.form.get('password') # O nome do campo no HTML deve ser 'password'
+
+        # Adiciona validação para campos vazios
+        if not email or not senha:
+            flash('Por favor, preencha todos os campos.', 'danger')
+            return redirect(url_for('login'))
+
+        # Correção anterior: Usar filter_by() em vez de filter() com argumento nomeado
+        usuario = Usuario.query.filter_by(email=email).first()
+
+        # Agora 'senha' não será None aqui, pois já verificamos acima
+        if usuario and usuario.check_senha(senha): # Linha 120, agora segura
             login_user(usuario)
-            flash('Login realizado com sucesso!', 'success')
+            flash('Login bem-sucedido!', 'success')
             return redirect(url_for('dashboard'))
         else:
             flash('Email ou senha incorretos.', 'danger')
-    return render_template('login.html', title='Login')
+            return redirect(url_for('login'))
+
+    return render_template('login.html')
 
 @app.route('/logout')
 @login_required

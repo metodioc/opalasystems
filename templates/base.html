@@ -51,22 +51,32 @@
     <main class="main-content">
         <!-- Header -->
         <header class="header">
-            <div class="header-title">
-                <h1>Opala Systems</h1>
-                <div class="header-subtitle">
-                    {% if request.endpoint == 'dashboard' %}
-                        Dashboard
-                    {% elif request.endpoint == 'horarios' %}
-                        Horários de Rega
-                    {% elif request.endpoint == 'esp32_status' %}
-                        Status da Irrigação
-                    {% elif request.endpoint == 'leitura_gabaritos' %}
-                        Leitura de Gabaritos
-                    {% else %}
-                        Sistema de Gestão
-                    {% endif %}
+            <div class="header-left"> {# Wrapper para o título e subtítulo #}
+                <div class="header-title">
+                    <h1>Opala Systems</h1>
+                    <div class="header-subtitle">
+                        {% if request.endpoint == 'dashboard' %}
+                            Dashboard
+                        {% elif request.endpoint == 'horarios' %}
+                            Horários de Rega
+                        {% elif request.endpoint == 'esp32_status' %}
+                            Status da Irrigação
+                        {% elif request.endpoint == 'leitura_gabaritos' %}
+                            Leitura de Gabaritos
+                        {% else %}
+                            Sistema de Gestão
+                        {% endif %}
+                    </div>
                 </div>
             </div>
+            {% if current_user.is_authenticated %}
+            <div class="header-user-info">
+                <span class="user-name">Olá, {{ current_user.nome if current_user.nome else current_user.email }}</span>
+                <a href="{{ url_for('logout') }}" class="btn btn-sm btn-outline-light logout-btn">
+                    Sair <i class="fas fa-sign-out-alt ms-1"></i>
+                </a>
+            </div>
+            {% endif %}
         </header>
         <!-- Flash Messages -->
         {% with messages = get_flashed_messages(with_categories=true) %}
