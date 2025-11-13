@@ -1,39 +1,45 @@
 {% extends "base.html" %}
-{% block title %}Editar Horário{% endblock %}
+{% block title %}Editar Horário - Opala Systems{% endblock %}
 {% block content %}
-    <div class="content-section">
-        {# NOVO: Usando a classe main-content-title para o título da página #}
-        <div class="main-content-title">Editar Horário de Rega</div>
-        <form method="POST" action="{{ url_for('editar_horario', horario_id=horario.id) }}">
-            <div class="mb-3">
-                <label for="hora" class="form-label">Horário (HH:MM):</label>
-                <input type="text" id="hora" name="hora" class="form-control" value="{{ horario.hora }}" pattern="^(?:2[0-3]|[01]?[0-9]):(?:[0-5]?[0-9])$" required>
-                <small class="form-text text-muted">Exemplo: 06:30</small>
-            </div>
-            <div class="mb-3">
-                <label for="duracao" class="form-label">Duração (minutos):</label>
-                <input type="number" id="duracao" name="duracao" class="form-control" value="{{ horario.duracao }}" min="1" max="1440" required>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Dias da Semana:</label>
-                <div class="d-flex flex-wrap gap-3">
-                    {% set dias_selecionados = horario.dias_semana.split(',') %}
-                    {% for dia in dias_semana_list %}
-                        <div class="form-check">
-                            <input type="checkbox" class="form-check-input" id="dia_{{ dia }}" name="dias_semana" value="{{ dia }}" {% if dia in dias_selecionados %}checked{% endif %}>
-                            <label class="form-check-label" for="dia_{{ dia }}">{{ dia }}</label>
-                        </div>
-                    {% endfor %}
+<div class="content-section">
+    <h2 class="main-content-title">Editar Horário de Rega</h2>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            Detalhes do Horário
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('editar_horario', horario_id=horario.id) }}">
+                <div class="mb-3">
+                    <label for="hora" class="form-label">Hora (HH:MM)</label>
+                    <input type="text" class="form-control" id="hora" name="hora" value="{{ horario.hora.strftime('%H:%M') }}" pattern="^(?:2[0-3]|[01]?[0-9]):(?:[0-5]?[0-9])$" required>
+                    <small class="form-text text-muted">Formato: HH:MM (ex: 08:30)</small>
                 </div>
-            </div>
-            <div class="form-check mb-3">
-                <input type="checkbox" class="form-check-input" id="ativo" name="ativo" {% if horario.ativo %}checked{% endif %}>
-                <label class="form-check-label" for="ativo">Ativo</label>
-            </div>
-            <div class="d-flex justify-content-center gap-3 mt-4">
-                <button type="submit" class="btn btn-success px-4">Salvar</button>
-                <a href="{{ url_for('horarios') }}" class="btn btn-secondary px-4">Cancelar</a>
-            </div>
-        </form>
+                <div class="mb-3">
+                    <label for="duracao" class="form-label">Duração (minutos)</label>
+                    <input type="number" class="form-control" id="duracao" name="duracao" value="{{ horario.duracao }}" min="1" max="1440" required>
+                    <small class="form-text text-muted">Duração da rega em minutos</small>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Dias da Semana</label>
+                    <div class="row">
+                        {% set dias_semana_todos = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'] %}
+                        {% for dia in dias_semana_todos %}
+                            <div class="col-md-2 col-sm-4 col-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="dias" value="{{ dia }}" id="dia-{{ dia }}" {% if dia in dias_selecionados %}checked{% endif %}>
+                                    <label class="form-check-label" for="dia-{{ dia }}">{{ dia }}</label>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('horarios') }}" class="btn btn-secondary">Cancelar</a>
+                    <button type="submit" class="btn btn-primary">Salvar Alterações</button>
+                </div>
+            </form>
+        </div>
     </div>
-{% endblock content %}
+</div>
+{% endblock %}

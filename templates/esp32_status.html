@@ -3,7 +3,6 @@
 {% block content %}
     <div class="content-section">
         <div class="main-content-title">Status da Irrigação</div>
-        
         <div class="row">
             <div class="col-md-6 mb-4">
                 <div class="card text-center h-100 shadow-sm">
@@ -24,11 +23,10 @@
             <div class="col-md-6 mb-4">
                 <div class="card text-center h-100 shadow-sm">
                     <div class="card-header bg-info text-white">
-                        <i class="fas fa-clock me-2"></i>Horários de Rega para Hoje <!-- Título agora mais específico -->
+                        <i class="fas fa-clock me-2"></i>Horários de Rega para Hoje
                     </div>
                     <div class="card-body" id="proximosHorariosContainer">
-                        <!-- Conteúdo será gerado aqui pelo JS -->
-                        <p class="text-muted">Carregando...</p>
+                        <p class="text-muted">Carregando horários...</p> 
                     </div>
                     <div class="card-footer text-muted">
                         Horários configurados no sistema.
@@ -36,144 +34,11 @@
                 </div>
             </div>
         </div>
-        
         <div class="alert alert-info mt-4 text-center" role="alert">
             Esta página é atualizada automaticamente a cada 5 segundos.
         </div>
     </div>
 
-    <script>
-        // Mapeamento de dias da semana para o formato Date.getDay() (0=Dom, 1=Seg...)
-        const diasMap = {
-            'Dom': 0, 'Seg': 1, 'Ter': 2, 'Qua': 3, 'Qui': 4, 'Sex': 5, 'Sab': 6
-        };
-        const diasNome = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
-
-        function formatarDataHora(isoString) {
-            if (!isoString) return 'N/A';
-            const date = new Date(isoString);
-            return date.toLocaleString('pt-BR', {
-                day: '2-digit', month: '2-digit', year: 'numeric',
-                hour: '2-digit', minute: '2-digit', second: '2-digit'
-            });
-        }
-
-        function atualizarStatusESP32() {
-            fetch('/status')
-                .then(response => response.json())
-                .then(data => {
-                    const statusRegaElement = document.getElementById('statusRega');
-                    const duracaoRegaElement = document.getElementById('duracaoRega');
-                    const timestampStatusElement = document.getElementById('timestampStatus');
-
-                    if (data.regar) {
-                        statusRegaElement.innerHTML = '<span class="text-success"><i class="fas fa-check-circle me-2"></i>Regando Agora!</span>';
-                        duracaoRegaElement.textContent = `Duração: ${data.duracao} minutos`;
-                    } else {
-                        statusRegaElement.innerHTML = '<span class="text-secondary"><i class="fas fa-pause-circle me-2"></i>Aguardando Próximo Horário</span>';
-                        duracaoRegaElement.textContent = ''; // Limpa a duração se não estiver regando
-                    }
-                    timestampStatusElement.textContent = formatarDataHora(data.timestamp);
-                })
-                .catch(error => {
-                    console.error('Erro ao buscar status da ESP32:', error);
-                    // Mensagem de erro mais visível
-                    document.getElementById('statusRega').innerHTML = '<span class="text-danger"><i class="fas fa-exclamation-triangle me-2"></i>Erro ao carregar status</span>';
-                    document.getElementById('duracaoRega').textContent = '';
-                    document.getElementById('timestampStatus').textContent = 'N/A';
-                });
-        }
-
-        function atualizarProximosHorarios() {
-            fetch('/api/horarios')
-                .then(response => response.json())
-                .then(horarios => {
-                    const agora = new Date();
-                    const diaAtualNumerico = agora.getDay(); // 0=Dom, 1=Seg, ..., 6=Sab
-                    const horariosDoDiaAtual = [];
-
-                    const container = document.getElementById('proximosHorariosContainer');
-                    container.innerHTML = ''; // Limpa o conteúdo anterior
-
-                    if (horarios.length === 0) {
-                        container.innerHTML = '<p class="text-muted">Nenhum horário configurado.</p>';
-                        return;
-                    }
-
-                    horarios.forEach(horario => {
-                        const [horaStr, minutoStr] = horario.hora.split(':');
-                        // Mapeia as abreviações dos dias do horário para um array de strings limpas
-                        const diasSemanaAtivos = horario.dias_semana.split(',').map(d => d.trim());
-
-                        // Encontra a abreviação do dia atual (ex: 'Seg') a partir do diaNumerico
-                        const diaAtualAbreviado = Object.keys(diasMap).find(key => diasMap[key] === diaAtualNumerico);
-
-                        // Verifica se o horário está ativo para o dia atual
-                        if (diasSemanaAtivos.includes(diaAtualAbreviado)) {
-                            let dataOcorrenciaHoje = new Date(agora);
-                            dataOcorrenciaHoje.setHours(parseInt(horaStr), parseInt(minutoStr), 0, 0);
-
-                            // Se o horário ainda não passou hoje
-                            if (dataOcorrenciaHoje >= agora) {
-                                horariosDoDiaAtual.push({
-                                    data: dataOcorrenciaHoje,
-                                    duracao: horario.duracao,
-                                    horaOriginal: horario.hora,
-                                    diasOriginal: horario.dias_semana // Mantém para o badge, se quiser
-                                });
-                            }
-                        }
-                    });
-
-                    // Ordenar os horários do dia atual cronologicamente
-                    horariosDoDiaAtual.sort((a, b) => a.data.getTime() - b.data.getTime());
-
-                    if (horariosDoDiaAtual.length === 0) {
-                        container.innerHTML = '<p class="text-muted">Nenhum horário futuro para hoje.</p>';
-                        return;
-                    }
-
-                    // Exibir todos os horários do dia atual que ainda não passaram
-                    horariosDoDiaAtual.forEach(agendamento => {
-                        // Não precisamos do dia da semana e data, pois já sabemos que é "hoje"
-                        const horaFormatada = agendamento.data.toLocaleTimeString('pt-BR', {
-                            hour: '2-digit', minute: '2-digit'
-                        });
-
-                        const itemDiv = document.createElement('div');
-                        itemDiv.className = 'd-flex justify-content-between align-items-center mb-2 pb-2 border-bottom';
-                        itemDiv.innerHTML = `
-                            <div>
-                                <strong class="text-primary">${horaFormatada}</strong>
-                                <br><small class="text-muted">Duração: ${agendamento.duracao} min</small>
-                            </div>
-                            <!-- O badge com os dias originais pode ser útil para saber de qual agendamento veio -->
-                            <span class="badge bg-secondary">${agendamento.diasOriginal}</span>
-                        `;
-                        container.appendChild(itemDiv);
-                    });
-                    // Remove a borda inferior do último item para uma estética mais limpa
-                    if (container.lastChild && container.lastChild.classList.contains('border-bottom')) {
-                        container.lastChild.classList.remove('border-bottom');
-                        container.lastChild.classList.remove('pb-2');
-                    }
-
-                })
-                .catch(error => {
-                    console.error('Erro ao buscar horários:', error);
-                    document.getElementById('proximosHorariosContainer').innerHTML = '<p class="text-danger">Erro ao carregar horários.</p>';
-                });
-        }
-
-        // Atualiza o status e os horários imediatamente ao carregar a página
-        document.addEventListener('DOMContentLoaded', () => {
-            atualizarStatusESP32();
-            atualizarProximosHorarios();
-        });
-        // Configura a atualização a cada 5 segundos
-        setInterval(() => {
-            atualizarStatusESP32();
-            atualizarProximosHorarios();
-        }, 5000); 
-    </script>
+    {# Agora o JavaScript é carregado de um arquivo externo #}
+    <script src="{{ url_for('static', filename='js/esp32_status.js') }}"></script>
 {% endblock content %}

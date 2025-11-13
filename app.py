@@ -1,144 +1,89 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
-from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
-from flask_bcrypt import Bcrypt
-from datetime import datetime, timedelta
-import pytz
 import os
-from dotenv import load_dotenv
-import re  # Importa o módulo de expressões regulares para validação de hora
+from datetime import datetime, time
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask_sqlalchemy import SQLAlchemy
+from flask_bcrypt import Bcrypt
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from flask_migrate import Migrate # Para gerenciar migrações de banco de dados
+from sqlalchemy import func # NOVO: Importar func para funções de agregação como SUM
 
-# Carregar variáveis de ambiente
-load_dotenv()
-
-# Código de convite para registro controlado
-CODIGO_CONVITE = os.environ.get('CODIGO_CONVITE', 'IRRIGACAO2025')
-print(f"🔑 CÓDIGO DE CONVITE CARREGADO: '{CODIGO_CONVITE}'")
-
+# --- Configuração do Aplicativo Flask ---
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 
-# Configuração do banco de dados
-database_url = os.environ.get('DATABASE_URL')
-if database_url:
-    if database_url.startswith('postgres://'):
-        database_url = database_url.replace('postgres://', 'postgresql://', 1)
-    if 'postgresql://' in database_url and '+psycopg' not in database_url:
-        database_url = database_url.replace('postgresql://', 'postgresql+psycopg://', 1)
-    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
-else:
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///irrig.db'
-    print("🔗 Usando SQLite local")
-
+# Configurações de segurança e banco de dados
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'sua_chave_secreta_muito_segura_aqui') # Use uma chave forte e variável de ambiente em produção
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'postgresql://opalasystems_user:sua_senha_forte_aqui@localhost:5432/opalasystems_db') # Exemplo para PostgreSQL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    'pool_pre_ping': True,
-    'pool_recycle': 300,
-}
 
+# Inicializa extensões
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 login_manager = LoginManager(app)
-login_manager.login_view = 'login'
-login_manager.login_message = 'Por favor, faça login para acessar esta página.'
-login_manager.login_message_category = 'info'
+login_manager.login_view = 'login' # Define a rota para onde o usuário será redirecionado se tentar acessar uma página protegida sem estar logado
+login_manager.login_message_category = 'info' # Categoria da mensagem flash para login_required
+migrate = Migrate(app, db) # Inicializa o Flask-Migrate
 
-# Fuso horário de Brasília
-BRASILIA_TZ = pytz.timezone('America/Sao_Paulo')
+# --- Modelos de Banco de Dados ---
 
-def agora_br():
-    """Retorna o horário atual em Brasília"""
-    return datetime.now(BRASILIA_TZ)
-
-# Modelos do banco de dados
-class Usuario(UserMixin, db.Model):
+# Modelo de Usuário
+class Usuario(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    senha_hash = db.Column(db.String(200), nullable=False)
-    criado_em = db.Column(db.DateTime, default=lambda: agora_br())
-    horarios = db.relationship('HorarioRega', backref='usuario', lazy=True, cascade='all, delete-orphan')
+    senha_hash = db.Column(db.String(128), nullable=False) # Armazena o hash da senha
 
-    def set_senha(self, senha):
-        self.senha_hash = bcrypt.generate_password_hash(senha).decode('utf-8')
+    def set_password(self, password):
+        self.senha_hash = bcrypt.generate_password_hash(password).decode('utf-8')
 
-    def check_senha(self, senha):
-        return bcrypt.check_password_hash(self.senha_hash, senha)
+    def check_password(self, password):
+        return bcrypt.check_password_hash(self.senha_hash, password)
 
-class HorarioRega(db.Model):
+    # Métodos exigidos pelo Flask-Login
+    def get_id(self):
+        return str(self.id)
+
+    @property
+    def is_active(self):
+        return True # Todos os usuários são ativos por padrão
+
+    @property
+    def is_authenticated(self):
+        return True
+
+    @property
+    def is_anonymous(self):
+        return False
+
+    def __repr__(self):
+        return f"Usuario('{self.nome}', '{self.email}')"
+
+# Modelo de Horário de Rega
+class Horario(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    hora = db.Column(db.String(5), nullable=False)  # Formato "HH:MM"
-    duracao = db.Column(db.Integer, default=600)  # Duração em minutos (assumindo que 600 é 10 minutos)
-    dias_semana = db.Column(db.String(50), default='Seg,Sex')  # Ex: "Seg,Ter,Qua"
+    hora = db.Column(db.Time, nullable=False) # Armazena apenas a hora (HH:MM)
+    duracao = db.Column(db.Integer, nullable=False) # Duração em minutos
+    dias_semana = db.Column(db.String(50), nullable=False) # Ex: "Seg,Ter,Qua"
     ativo = db.Column(db.Boolean, default=True)
-    criado_em = db.Column(db.DateTime, default=lambda: agora_br())
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
 
+    # Relacionamento com o modelo Usuario
+    usuario = db.relationship('Usuario', backref=db.backref('horarios', lazy=True))
+
+    def __repr__(self):
+        return f"Horario('{self.hora}', '{self.duracao}', '{self.dias_semana}', '{self.ativo}')"
+
+# --- Funções de Suporte do Flask-Login ---
 @login_manager.user_loader
 def load_user(user_id):
-    # Atualizando para usar Session.get() em vez de Query.get() para evitar aviso de depreciação
+    # CORREÇÃO: Usando db.session.get() para compatibilidade com SQLAlchemy 2.0
     return db.session.get(Usuario, int(user_id))
 
-# Criar tabelas ANTES de qualquer requisição
-with app.app_context():
-    try:
-        db.create_all()
-        print(f"✅ Banco configurado! {agora_br().strftime('%d/%m/%Y %H:%M:%S')}")
-    except Exception as e:
-        print(f"❌ Erro ao configurar banco: {e}")
-
-# Função auxiliar para verificar horários
-def verificar_horario_rega():
-    """Verifica se deve regar agora"""
-    try:
-        agora = agora_br()
-        hora_atual = agora.strftime('%H:%M')
-        dia_semana = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom'][agora.weekday()]
-        horarios = HorarioRega.query.filter_by(ativo=True).all()
-        for h in horarios:
-            if dia_semana in h.dias_semana.split(',') and h.hora == hora_atual:
-                return True, h.duracao
-        return False, 0
-    except Exception as e:
-        print(f"Erro ao verificar horário: {e}")
-        return False, 0
+# --- Rotas da Aplicação ---
 
 @app.route('/')
 def index():
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
-    return redirect(url_for('login'))
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        email = request.form.get('email')
-        senha = request.form.get('password') # O nome do campo no HTML deve ser 'password'
-
-        # Adiciona validação para campos vazios
-        if not email or not senha:
-            flash('Por favor, preencha todos os campos.', 'danger')
-            return redirect(url_for('login'))
-
-        # Correção anterior: Usar filter_by() em vez de filter() com argumento nomeado
-        usuario = Usuario.query.filter_by(email=email).first()
-
-        # Agora 'senha' não será None aqui, pois já verificamos acima
-        if usuario and usuario.check_senha(senha): # Linha 120, agora segura
-            login_user(usuario)
-            flash('Login bem-sucedido!', 'success')
-            return redirect(url_for('dashboard'))
-        else:
-            flash('Email ou senha incorretos.', 'danger')
-            return redirect(url_for('login'))
-
-    return render_template('login.html')
-
-@app.route('/logout')
-@login_required
-def logout():
-    logout_user()
-    flash('Você foi desconectado.', 'info')
     return redirect(url_for('login'))
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -148,166 +93,239 @@ def register():
     if request.method == 'POST':
         nome = request.form.get('nome')
         email = request.form.get('email')
-        senha = request.form.get('senha')
-        convite = request.form.get('convite')
-        if convite != CODIGO_CONVITE:
-            flash('Código de convite inválido.', 'danger')
-            return render_template('register.html', title='Registro')
-        if Usuario.query.filter_by(email=email).first():
-            flash('Email já registrado.', 'danger')
-            return render_template('register.html', title='Registro')
-        usuario = Usuario(nome=nome, email=email)
-        usuario.set_senha(senha)
-        db.session.add(usuario)
+        password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+
+        if not nome or not email or not password or not confirm_password:
+            flash('Por favor, preencha todos os campos.', 'danger')
+            return render_template('register.html')
+
+        if password != confirm_password:
+            flash('As senhas não coincidem.', 'danger')
+            return render_template('register.html', nome=nome, email=email)
+
+        existing_user = Usuario.query.filter_by(email=email).first()
+        if existing_user:
+            flash('Este e-mail já está cadastrado. Por favor, use outro.', 'danger')
+            return render_template('register.html', nome=nome, email=email)
+
+        new_user = Usuario(nome=nome, email=email)
+        new_user.set_password(password)
+        db.session.add(new_user)
         db.session.commit()
-        flash('Registro realizado com sucesso! Faça login.', 'success')
+        flash('Sua conta foi criada com sucesso! Faça login para continuar.', 'success')
         return redirect(url_for('login'))
-    return render_template('register.html', title='Registro')
+    return render_template('register.html')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    if request.method == 'POST':
+        email = request.form.get('email')
+        password = request.form.get('password')
+
+        if not email or not password:
+            flash('Por favor, preencha o e-mail e a senha.', 'danger')
+            return render_template('login.html')
+
+        usuario = Usuario.query.filter_by(email=email).first()
+        if usuario and usuario.check_password(password):
+            login_user(usuario)
+            flash(f'Bem-vindo(a), {usuario.nome}!', 'success')
+            next_page = request.args.get('next')
+            return redirect(next_page or url_for('dashboard'))
+        else:
+            flash('Login inválido. Verifique seu e-mail e senha.', 'danger')
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    flash('Você foi desconectado com sucesso.', 'info')
+    return redirect(url_for('login'))
 
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    regar, duracao = verificar_horario_rega()
-    agora = agora_br()
-    horarios = HorarioRega.query.filter_by(usuario_id=current_user.id).all()
-    ativos = sum(1 for h in horarios if h.ativo)
-    return render_template('dashboard.html',
-                         title='Dashboard',
-                         horario_atual=agora.strftime('%H:%M:%S - %d/%m/%Y'),
-                         status='Regando' if regar else 'Aguardando',
-                         duracao=duracao,
-                         total_horarios=len(horarios),
-                         horarios_ativos=ativos)
+    # NOVO: Calcular a duração total das regas ativas para o usuário logado
+    total_duracao_minutos = db.session.query(func.sum(Horario.duracao)).filter_by(
+        usuario_id=current_user.id,
+        ativo=True
+    ).scalar()
+
+    # Se não houver horários ativos, a soma pode retornar None, então definimos como 0
+    total_duracao_minutos = total_duracao_minutos if total_duracao_minutos is not None else 0
+
+    # Você pode querer passar também os horários ativos para exibir no dashboard
+    horarios_ativos = Horario.query.filter_by(usuario_id=current_user.id, ativo=True).order_by(Horario.hora).all()
+
+    return render_template('dashboard.html', 
+                           duracao=total_duracao_minutos,
+                           horarios_ativos=horarios_ativos)
+
 
 @app.route('/horarios')
 @login_required
 def horarios():
-    horarios = HorarioRega.query.filter_by(usuario_id=current_user.id).all()
-    return render_template('horarios.html', title='Meus Horários', horarios=horarios)
+    horarios_do_usuario = Horario.query.filter_by(usuario_id=current_user.id).order_by(Horario.hora).all()
+    return render_template('horarios.html', horarios=horarios_do_usuario)
 
-@app.route('/novo_horario', methods=['POST'])
+@app.route('/adicionar_horario', methods=['POST'])
 @login_required
-def novo_horario():
+def adicionar_horario():
+    data = request.get_json()
+    if not data:
+        return jsonify({'sucesso': False, 'erro': 'Dados inválidos.'}), 400
+
     try:
-        dados = request.get_json()
-        hora = dados['hora']
-        duracao = int(dados['duracao'])
-        dias = dados['dias_semana']  # Já vem como string no formato "Seg,Ter,Qua"
-        if not re.match(r'^(?:2[0-3]|[01]?[0-9]):(?:[0-5]?[0-9])$', hora):
-            return jsonify({'sucesso': False, 'erro': 'Formato de hora inválido. Use HH:MM'}), 400
-        horario = HorarioRega(
+        hora_str = data.get('hora')
+        duracao = data.get('duracao')
+        dias_semana = data.get('dias')
+
+        if not hora_str or not duracao or not dias_semana:
+            return jsonify({'sucesso': False, 'erro': 'Todos os campos são obrigatórios.'}), 400
+
+        hora = datetime.strptime(hora_str, '%H:%M').time()
+        duracao = int(duracao)
+
+        novo_horario = Horario(
             hora=hora,
             duracao=duracao,
-            dias_semana=dias,
+            dias_semana=dias_semana,
+            ativo=True,
             usuario_id=current_user.id
         )
-        db.session.add(horario)
+        db.session.add(novo_horario)
         db.session.commit()
+        flash('Horário de rega adicionado com sucesso!', 'success')
         return jsonify({'sucesso': True})
+    except ValueError:
+        db.session.rollback()
+        return jsonify({'sucesso': False, 'erro': 'Formato de hora ou duração inválido.'}), 400
     except Exception as e:
         db.session.rollback()
-        print(f"Erro ao criar horário: {e}")
-        return jsonify({'sucesso': False, 'erro': str(e)}), 500
+        return jsonify({'sucesso': False, 'erro': f'Ocorreu um erro: {str(e)}'}), 500
 
 @app.route('/editar_horario/<int:horario_id>', methods=['GET', 'POST'])
 @login_required
 def editar_horario(horario_id):
-    horario = HorarioRega.query.get_or_404(horario_id)
+    horario = db.session.get(Horario, horario_id) # Usando db.session.get()
+    if not horario:
+        flash('Horário não encontrado.', 'danger')
+        return redirect(url_for('horarios'))
+
     if horario.usuario_id != current_user.id:
         flash('Você não tem permissão para editar este horário.', 'danger')
         return redirect(url_for('horarios'))
+
     if request.method == 'POST':
         try:
-            hora = request.form.get('hora')
+            hora_str = request.form.get('hora')
             duracao = request.form.get('duracao')
-            dias_semana = ','.join(request.form.getlist('dias_semana'))
-            if not re.match(r'^(?:2[0-3]|[01]?[0-9]):(?:[0-5]?[0-9])$', hora):
-                flash('Formato de hora inválido. Use HH:MM', 'danger')
-                return render_template('editar_horario.html', title='Editar Horário', horario=horario, dias_semana_list=['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom'])
-            horario.hora = hora
+            dias_semana_list = request.form.getlist('dias')
+
+            if not hora_str or not duracao or not dias_semana_list:
+                flash('Por favor, preencha todos os campos.', 'danger')
+                return redirect(url_for('editar_horario', horario_id=horario.id))
+
+            horario.hora = datetime.strptime(hora_str, '%H:%M').time()
             horario.duracao = int(duracao)
-            horario.dias_semana = dias_semana if dias_semana else 'Seg'
+            horario.dias_semana = ",".join(dias_semana_list)
+
             db.session.commit()
-            flash('Horário atualizado com sucesso!', 'success')
+            flash('Horário de rega atualizado com sucesso!', 'success')
             return redirect(url_for('horarios'))
         except ValueError:
-            flash('Entrada inválida. Certifique-se de que os campos numéricos estão corretos.', 'danger')
+            db.session.rollback()
+            flash('Formato de hora ou duração inválido.', 'danger')
+            return redirect(url_for('editar_horario', horario_id=horario.id))
         except Exception as e:
             db.session.rollback()
-            print(f"Erro ao atualizar horário: {e}")
-            flash(f'Ocorreu um erro ao atualizar o agendamento: {e}', 'danger')
-    # Se for um GET request, exibe o formulário preenchido
-    # Passa a lista de dias da semana para o template
-    return render_template('editar_horario.html', title='Editar Horário', horario=horario, dias_semana_list=['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom'])
+            flash(f'Ocorreu um erro ao atualizar o horário: {str(e)}', 'danger')
+            return redirect(url_for('editar_horario', horario_id=horario.id))
 
-@app.route('/deletar_horario/<int:id>', methods=['DELETE'])
+    dias_selecionados = horario.dias_semana.split(',')
+    return render_template('editar_horario.html', horario=horario, dias_selecionados=dias_selecionados)
+
+@app.route('/deletar_horario/<int:horario_id>', methods=['DELETE'])
 @login_required
-def deletar_horario(id):
+def deletar_horario(horario_id):
+    horario = db.session.get(Horario, horario_id) # Usando db.session.get()
+    if not horario:
+        return jsonify({'sucesso': False, 'erro': 'Horário não encontrado.'}), 404
+
+    if horario.usuario_id != current_user.id:
+        return jsonify({'sucesso': False, 'erro': 'Você não tem permissão para deletar este horário.'}), 403
+
     try:
-        horario = HorarioRega.query.get_or_404(id)
-        if horario.usuario_id != current_user.id:
-            return jsonify({'sucesso': False, 'erro': 'Não autorizado'}), 403
         db.session.delete(horario)
         db.session.commit()
+        flash('Horário de rega excluído com sucesso!', 'success')
         return jsonify({'sucesso': True})
     except Exception as e:
         db.session.rollback()
-        print(f"Erro ao deletar horário: {e}")
-        return jsonify({'sucesso': False, 'erro': str(e)}), 500
+        return jsonify({'sucesso': False, 'erro': f'Ocorreu um erro ao excluir o horário: {str(e)}'}), 500
 
-@app.route('/ativar_horario/<int:id>', methods=['PUT'])
+@app.route('/ativar_horario/<int:horario_id>', methods=['PUT'])
 @login_required
-def ativar_horario(id):
+def ativar_horario(horario_id):
+    horario = db.session.get(Horario, horario_id) # Usando db.session.get()
+    if not horario:
+        return jsonify({'sucesso': False, 'erro': 'Horário não encontrado.'}), 404
+
+    if horario.usuario_id != current_user.id:
+        return jsonify({'sucesso': False, 'erro': 'Você não tem permissão para alterar este horário.'}), 403
+
+    data = request.get_json()
+    if not data or 'ativo' not in data:
+        return jsonify({'sucesso': False, 'erro': 'Dados inválidos.'}), 400
+
     try:
-        horario = HorarioRega.query.get_or_404(id)
-        if horario.usuario_id != current_user.id:
-            return jsonify({'sucesso': False, 'erro': 'Não autorizado'}), 403
-        dados = request.get_json()
-        horario.ativo = dados['ativo']
+        horario.ativo = bool(data['ativo'])
         db.session.commit()
+        flash(f'Horário {"ativado" if horario.ativo else "desativado"} com sucesso!', 'success')
         return jsonify({'sucesso': True})
     except Exception as e:
         db.session.rollback()
-        print(f"Erro ao atualizar horário: {e}")
-        return jsonify({'sucesso': False, 'erro': str(e)}), 500
+        return jsonify({'sucesso': False, 'erro': f'Ocorreu um erro ao atualizar o status: {str(e)}'}), 500
 
-@app.route('/status')
-def status_api():
-    regar, duracao = verificar_horario_rega()
-    return jsonify({
-        'regar': regar,
-        'duracao': duracao,
-        'timestamp': agora_br().isoformat()
-    })
-
-@app.route('/api/horarios')
-@login_required  # Adiciona a exigência de login
-def listar_horarios_api():
-    # Agora filtra apenas os horários do usuário logado que estão ativos
-    horarios = HorarioRega.query.filter_by(usuario_id=current_user.id, ativo=True).all()
-    return jsonify([{
-        'id': h.id,
-        'hora': h.hora,
-        'duracao': h.duracao,
-        'dias_semana': h.dias_semana
-    } for h in horarios])
-
-# NOVA ROTA: Página de Status da ESP32
+# --- Rotas de Placeholder (mantenha se você as tiver em outros arquivos ou precisar delas) ---
 @app.route('/esp32_status')
 @login_required
 def esp32_status():
-    return render_template('esp32_status.html', title='Status da Irrigação')
+    return render_template('esp32_status.html')
 
-@app.route('/health')
-def health():
-    return jsonify({'status': 'ok'}), 200
-
-# ROTA PARA LEITURA DE GABARITOS (CORRIGIDA E POSICIONADA CORRETAMENTE)
 @app.route('/leitura_gabaritos')
 @login_required
 def leitura_gabaritos():
-    return render_template('leitura_gabaritos.html', title='Leitura de Gabaritos')
+    return render_template('leitura_gabaritos.html')
 
+@app.route('/status')
+@login_required
+def status():
+    return jsonify({'status': 'ok', 'message': 'Sistema funcionando'})
+
+@app.route('/api/horarios')
+@login_required
+def api_horarios():
+    horarios_ativos = Horario.query.filter_by(usuario_id=current_user.id, ativo=True).all()
+    horarios_data = []
+    for h in horarios_ativos:
+        horarios_data.append({
+            'id': h.id,
+            'hora': h.hora.strftime('%H:%M'),
+            'duracao': h.duracao,
+            'dias_semana': h.dias_semana.split(',')
+        })
+    return jsonify(horarios_data)
+
+
+# --- Execução da Aplicação ---
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    # Comentado para usar Flask-Migrate para gerenciamento de esquema
+    # Se você ainda não executou 'flask db upgrade', faça-o!
+    # with app.app_context():
+    #     db.create_all()
+    app.run(debug=True)

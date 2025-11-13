@@ -3,46 +3,62 @@
 {% block content %}
     <div class="content-section">
         {# NOVO: Usando a classe main-content-title para o título da página #}
-        <div class="main-content-title">Meus Horários de Rega - Opala Systems</div>
-        {% if horarios %}
-            <ul class="list-group">
-                {% for horario in horarios %}
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        <div>
-                            <strong>Horário:</strong> {{ horario.hora }} <br>
-                            <strong>Duração:</strong> {{ horario.duracao }} minutos <br>
-                            <strong>Dias:</strong> {{ horario.dias_semana }} <br>
-                            <strong>Status:</strong>
-                            {% if horario.ativo %}
-                                <span class="badge bg-success">Ativo</span>
-                            {% else %}
-                                <span class="badge bg-secondary">Inativo</span>
-                            {% endif %}
-                        </div>
-                        <div>
-                            <!-- Botão/Link para Editar -->
-                            <a href="{{ url_for('editar_horario', horario_id=horario.id) }}" class="btn btn-info btn-sm me-2">Editar</a>
-                            <!-- Botão de Excluir -->
-                            <button type="button" class="btn btn-danger btn-sm" onclick="deletarHorario({{ horario.id }})">Excluir</button>
-                            <!-- Botão de Ativar/Desativar -->
-                            <button type="button" class="btn btn-warning btn-sm" onclick="toggleAtivo({{ horario.id }}, {{ 'false' if horario.ativo else 'true' }})">
-                                {% if horario.ativo %}Desativar{% else %}Ativar{% endif %}
-                            </button>
-                        </div>
-                    </li>
-                {% endfor %}
-            </ul>
-        {% else %}
-            <p>Nenhum horário de rega cadastrado ainda. Adicione um!</p>
-        {% endif %}
-        <!-- Botão para Adicionar Horário (abre um modal) -->
-        <div class="mt-3 text-center">
+        <h2 class="main-content-title">Gerenciar Horários de Rega</h2> {# Alterado para h2 para semântica #}
+
+        <!-- Formulário para Adicionar Novo Horário (Modal Trigger) -->
+        <div class="mb-4 text-end"> {# Alinhado à direita para melhor visual #}
             <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalNovoHorario">
-                Adicionar Novo Horário
+                <i class="fas fa-plus me-2"></i> Adicionar Novo Horário
             </button>
         </div>
+
+        {% if horarios %}
+            <div class="table-responsive"> {# Tabela responsiva para melhor visualização em telas menores #}
+                <table class="table table-hover table-striped">
+                    <thead>
+                        <tr>
+                            <th>Hora</th>
+                            <th>Duração (min)</th>
+                            <th>Dias da Semana</th>
+                            <th>Status</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for horario in horarios %}
+                            <tr>
+                                <td>{{ horario.hora.strftime('%H:%M') }}</td> {# Formata o objeto time para string HH:MM #}
+                                <td>{{ horario.duracao }}</td>
+                                <td>{{ horario.dias_semana }}</td>
+                                <td>
+                                    {% if horario.ativo %}
+                                        <span class="badge bg-success">Ativo</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Inativo</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('editar_horario', horario_id=horario.id) }}" class="btn btn-sm btn-info me-2">
+                                        <i class="fas fa-edit"></i> Editar
+                                    </a>
+                                    <button type="button" class="btn btn-sm {% if horario.ativo %}btn-warning{% else %}btn-success{% endif %} me-2" onclick="toggleAtivo({{ horario.id }}, {{ 'false' if horario.ativo else 'true' }})">
+                                        {% if horario.ativo %}<i class="fas fa-pause"></i> Desativar{% else %}<i class="fas fa-play"></i> Ativar{% endif %}
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-danger" onclick="deletarHorario({{ horario.id }})">
+                                        <i class="fas fa-trash-alt"></i> Excluir
+                                    </button>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="text-center">Nenhum horário de rega cadastrado ainda. Clique em "Adicionar Novo Horário" para começar!</p>
+        {% endif %}
     </div>
-    <!-- MODAL para Adicionar Horário (mantido do código anterior) -->
+
+    <!-- MODAL para Adicionar Horário -->
     <div class="modal fade" id="modalNovoHorario" tabindex="-1" aria-labelledby="novoHorarioLabel" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -71,19 +87,19 @@
                                         <label class="form-check-label" for="seg">Seg</label>
                                     </div>
                                     <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" name="dias" value="Ter" id="ter">
+                                        <input class="form-check-input" type="checkbox" name="dias" value="Ter" id="ter" checked>
                                         <label class="form-check-label" for="ter">Ter</label>
                                     </div>
                                     <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" name="dias" value="Qua" id="qua">
+                                        <input class="form-check-input" type="checkbox" name="dias" value="Qua" id="qua" checked>
                                         <label class="form-check-label" for="qua">Qua</label>
-                                    </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" name="dias" value="Qui" id="qui">
-                                        <label class="form-check-label" for="qui">Qui</label>
                                     </div>
                                 </div>
                                 <div class="col">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="dias" value="Qui" id="qui" checked>
+                                        <label class="form-check-label" for="qui">Qui</label>
+                                    </div>
                                     <div class="form-check">
                                         <input class="form-check-input" type="checkbox" name="dias" value="Sex" id="sex" checked>
                                         <label class="form-check-label" for="sex">Sex</label>
@@ -108,6 +124,7 @@
             </div>
         </div>
     </div>
+
     <script>
         function salvarNovoHorario() {
             const form = document.getElementById('formNovoHorario');
@@ -123,7 +140,7 @@
                 alert('Selecione pelo menos um dia da semana.');
                 return;
             }
-            fetch('/adicionar_horario', {
+            fetch('{{ url_for("adicionar_horario") }}', { // Usando url_for
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -146,7 +163,7 @@
 
         function deletarHorario(id) {
             if (!confirm('Tem certeza que deseja excluir este horário?')) return;
-            fetch('/deletar_horario/' + id, {
+            fetch('{{ url_for("deletar_horario", horario_id=0) }}'.replace('0', id), { // Usando url_for
                 method: 'DELETE'
             })
             .then(response => response.json())
@@ -164,7 +181,7 @@
         }
 
         function toggleAtivo(id, novoEstado) {
-            fetch('/ativar_horario/' + id, {
+            fetch('{{ url_for("ativar_horario", horario_id=0) }}'.replace('0', id), { // Usando url_for
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
