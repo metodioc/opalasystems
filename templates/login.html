@@ -1,26 +1,26 @@
 {% extends "base.html" %}
 {% block title %}Login{% endblock %}
 {% block content %}
-    <div class="content-section col-md-6 offset-md-3"> {# Centraliza o card de login #}
-        <div class="main-content-title">Acessar Sistema</div> {# Título azul RA90 #}
-        <form method="POST" action="{{ url_for('login') }}">
-            <fieldset class="form-group">
-                <legend class="border-bottom mb-4 text-center">Faça seu Login</legend>
+<div class="container d-flex justify-content-center align-items-center min-vh-100">
+    <div class="col-md-6 col-lg-4">
+        <div class="content-section text-center">
+            <div class="main-content-title">Acessar Sistema</div>
+            <p class="text-muted mb-4">Faça seu Login</p>
+            <form method="POST" action="{{ url_for('login') }}">
                 <div class="mb-3">
-                    <label for="email" class="form-label">Email:</label>
-                    <input type="email" id="email" name="email" class="form-control" required>
+                    <label for="email" class="form-label visually-hidden">Email:</label>
+                    <input type="email" class="form-control" id="email" name="email" placeholder="Email" required>
                 </div>
                 <div class="mb-3">
-                    <label for="senha" class="form-label">Senha:</label>
-                    <input type="password" id="senha" name="senha" class="form-control" required>
+                    <label for="password" class="form-label visually-hidden">Senha:</label>
+                    <input type="password" class="form-control" id="password" name="password" placeholder="Senha" required>
                 </div>
-            </fieldset>
-            <div class="d-grid gap-2 mt-4"> {# Botão de largura total #}
-                <button type="submit" class="btn btn-primary">Entrar</button>
+                <button type="submit" class="btn btn-primary w-100 mt-3">Entrar</button>
+            </form>
+            <div class="mt-4">
+                <p class="text-muted">Ainda não tem uma conta? <a href="{{ url_for('register') }}" class="text-decoration-none">Registre-se aqui</a></p>
             </div>
-            <small class="text-muted d-block text-center mt-3">
-                Ainda não tem uma conta? <a href="{{ url_for('register') }}">Registre-se aqui</a>
-            </small>
-        </form>
+        </div>
     </div>
-{% endblock content %}
+</div>
+{% endblock %}

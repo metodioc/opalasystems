@@ -183,6 +183,19 @@ body {
     opacity: 1;
 }
 
+/* Bootstrap Button Overrides for new blue */
+.btn-primary {
+    background-color: #1e40af !important;
+    border-color: #1e40af !important;
+    color: white !important;
+}
+
+.btn-primary:hover {
+    background-color: #1a368b !important; /* Slightly darker on hover */
+    border-color: #1a368b !important;
+}
+
+
 /* Sidebar Toggle (Mobile) */
 .sidebar-toggle {
     display: none;
