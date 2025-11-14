@@ -16,8 +16,8 @@ load_dotenv()
 app = Flask(__name__)
 
 # Configurações de segurança e banco de dados
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'sua_chave_secreta_muito_segura_aqui') # Use uma chave forte e variável de ambiente em produção
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'postgresql://opalasystems_user:sua_senha_forte_aqui@localhost:5432/opalasystems_db') # Exemplo para PostgreSQL
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', '20ctIDB09') # Use uma chave forte e variável de ambiente em produção
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'postgresql://opalasystems_user:20ctIDB09@localhost:5432/opalasystems_db') # Exemplo para PostgreSQL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Inicializa extensões
