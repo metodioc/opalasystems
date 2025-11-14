@@ -1,40 +1,41 @@
 import os
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
-from flask_migrate import Migrate # Para gerenciar migrações de banco de dados
-from sqlalchemy import func # NOVO: Importar func para funções de agregação como SUM
-from dotenv import load_dotenv # NOVO: Importar load_dotenv para carregar variáveis do .env
+from flask_migrate import Migrate
+from sqlalchemy import func
+from dotenv import load_dotenv
+import secrets # NOVO: Para gerar chaves de API seguras
 
 # Carrega as variáveis de ambiente do arquivo .env
-# Isso garante que SECRET_KEY, DATABASE_URL e CODIGO_CONVITE sejam lidos
 load_dotenv()
 
 # --- Configuração do Aplicativo Flask ---
 app = Flask(__name__)
 
 # Configurações de segurança e banco de dados
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', '20ctIDB09') # Use uma chave forte e variável de ambiente em produção
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'postgresql://opalasystems_user:20ctIDB09@localhost:5432/opalasystems_db') # Exemplo para PostgreSQL
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', '20ctIDB09')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'postgresql://opalasystems_user:20ctIDB09@localhost:5432/opalasystems_db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Inicializa extensões
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 login_manager = LoginManager(app)
-login_manager.login_view = 'login' # Define a rota para onde o usuário será redirecionado se tentar acessar uma página protegida sem estar logado
-login_manager.login_message_category = 'info' # Categoria da mensagem flash para login_required
-migrate = Migrate(app, db) # Inicializa o Flask-Migrate
+login_manager.login_view = 'login'
+login_manager.login_message_category = 'info'
+migrate = Migrate(app, db)
 
 # --- Modelos de Banco de Dados ---
-# Modelo de Usuário
 class Usuario(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    senha_hash = db.Column(db.String(128), nullable=False) # Armazena o hash da senha
+    senha_hash = db.Column(db.String(128), nullable=False)
+    # NOVO CAMPO: Chave de API para ESP32
+    esp32_api_key = db.Column(db.String(64), unique=True, nullable=True) # Chave para autenticação da ESP32
 
     def set_password(self, password):
         self.senha_hash = bcrypt.generate_password_hash(password).decode('utf-8')
@@ -42,13 +43,12 @@ class Usuario(db.Model, UserMixin):
     def check_password(self, password):
         return bcrypt.check_password_hash(self.senha_hash, password)
 
-    # Métodos exigidos pelo Flask-Login
     def get_id(self):
         return str(self.id)
 
     @property
     def is_active(self):
-        return True # Todos os usuários são ativos por padrão
+        return True
 
     @property
     def is_authenticated(self):
@@ -61,15 +61,13 @@ class Usuario(db.Model, UserMixin):
     def __repr__(self):
         return f"Usuario('{self.nome}', '{self.email}')"
 
-# Modelo de Horário de Rega
 class Horario(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    hora = db.Column(db.Time, nullable=False) # Armazena apenas a hora (HH:MM)
-    duracao = db.Column(db.Integer, nullable=False) # Duração em minutos
-    dias_semana = db.Column(db.String(50), nullable=False) # Ex: "Seg,Ter,Qua"
+    hora = db.Column(db.Time, nullable=False)
+    duracao = db.Column(db.Integer, nullable=False)
+    dias_semana = db.Column(db.String(50), nullable=False)
     ativo = db.Column(db.Boolean, default=True)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
-    # Relacionamento com o modelo Usuario
     usuario = db.relationship('Usuario', backref=db.backref('horarios', lazy=True))
 
     def __repr__(self):
@@ -78,7 +76,6 @@ class Horario(db.Model):
 # --- Funções de Suporte do Flask-Login ---
 @login_manager.user_loader
 def load_user(user_id):
-    # CORREÇÃO: Usando db.session.get() para compatibilidade com SQLAlchemy 2.0
     return db.session.get(Usuario, int(user_id))
 
 # --- Rotas da Aplicação ---
@@ -95,38 +92,29 @@ def register():
     if request.method == 'POST':
         nome = request.form.get('nome')
         email = request.form.get('email')
-        # CORREÇÃO AQUI: Use 'senha' e 'confirmar_senha' para corresponder ao HTML
         password = request.form.get('senha')
         confirm_password = request.form.get('confirmar_senha')
-
-        # ADIÇÃO AQUI: Obter o código de convite do formulário
         invite_code_submitted = request.form.get('codigo')
 
-        # CORREÇÃO AQUI: Incluir invite_code_submitted na validação de campos vazios
         if not nome or not email or not password or not confirm_password or not invite_code_submitted:
             flash('Por favor, preencha todos os campos.', 'danger')
-            return render_template('register.html', nome=nome, email=email, codigo=invite_code_submitted) # Passa os dados para manter no formulário
+            return render_template('register.html', nome=nome, email=email, codigo=invite_code_submitted)
 
-        # ADIÇÃO AQUI: Obter o código de convite do ambiente
         expected_invite_code = os.getenv('CODIGO_CONVITE')
 
-        # ADIÇÃO AQUI: Validação do código de convite
-        # Verifica se o código de convite está configurado e se o enviado corresponde
         if not expected_invite_code or invite_code_submitted != expected_invite_code:
             flash('Código de convite inválido.', 'danger')
-            return render_template('register.html', nome=nome, email=email, codigo=invite_code_submitted) # Passa os dados para manter no formulário
+            return render_template('register.html', nome=nome, email=email, codigo=invite_code_submitted)
 
         if password != confirm_password:
             flash('As senhas não coincidem.', 'danger')
-            return render_template('register.html', nome=nome, email=email, codigo=invite_code_submitted) # Passa os dados para manter no formulário
+            return render_template('register.html', nome=nome, email=email, codigo=invite_code_submitted)
 
-        # Validação de email existente
         existing_user = Usuario.query.filter_by(email=email).first()
         if existing_user:
             flash('Este e-mail já está cadastrado. Por favor, use outro.', 'danger')
-            return render_template('register.html', nome=nome, email=email, codigo=invite_code_submitted) # Passa os dados para manter no formulário
+            return render_template('register.html', nome=nome, email=email, codigo=invite_code_submitted)
 
-        # Se tudo estiver OK, cria o novo usuário
         new_user = Usuario(nome=nome, email=email)
         new_user.set_password(password)
         db.session.add(new_user)
@@ -141,7 +129,7 @@ def login():
         return redirect(url_for('dashboard'))
     if request.method == 'POST':
         email = request.form.get('email')
-        password = request.form.get('password') # Aqui o nome 'password' está correto, pois o formulário de login deve usar 'password'
+        password = request.form.get('password')
         if not email or not password:
             flash('Por favor, preencha o e-mail e a senha.', 'danger')
             return render_template('login.html')
@@ -165,14 +153,11 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    # NOVO: Calcular a duração total das regas ativas para o usuário logado
     total_duracao_minutos = db.session.query(func.sum(Horario.duracao)).filter_by(
         usuario_id=current_user.id,
         ativo=True
     ).scalar()
-    # Se não houver horários ativos, a soma pode retornar None, então definimos como 0
     total_duracao_minutos = total_duracao_minutos if total_duracao_minutos is not None else 0
-    # Você pode querer passar também os horários ativos para exibir no dashboard
     horarios_ativos = Horario.query.filter_by(usuario_id=current_user.id, ativo=True).order_by(Horario.hora).all()
     return render_template('dashboard.html', 
                             duracao=total_duracao_minutos,
@@ -219,7 +204,7 @@ def adicionar_horario():
 @app.route('/editar_horario/<int:horario_id>', methods=['GET', 'POST'])
 @login_required
 def editar_horario(horario_id):
-    horario = db.session.get(Horario, horario_id) # Usando db.session.get()
+    horario = db.session.get(Horario, horario_id)
     if not horario:
         flash('Horário não encontrado.', 'danger')
         return redirect(url_for('horarios'))
@@ -254,7 +239,7 @@ def editar_horario(horario_id):
 @app.route('/deletar_horario/<int:horario_id>', methods=['DELETE'])
 @login_required
 def deletar_horario(horario_id):
-    horario = db.session.get(Horario, horario_id) # Usando db.session.get()
+    horario = db.session.get(Horario, horario_id)
     if not horario:
         return jsonify({'sucesso': False, 'erro': 'Horário não encontrado.'}), 404
     if horario.usuario_id != current_user.id:
@@ -271,7 +256,7 @@ def deletar_horario(horario_id):
 @app.route('/ativar_horario/<int:horario_id>', methods=['PUT'])
 @login_required
 def ativar_horario(horario_id):
-    horario = db.session.get(Horario, horario_id) # Usando db.session.get()
+    horario = db.session.get(Horario, horario_id)
     if not horario:
         return jsonify({'sucesso': False, 'erro': 'Horário não encontrado.'}), 404
     if horario.usuario_id != current_user.id:
@@ -288,11 +273,99 @@ def ativar_horario(horario_id):
         db.session.rollback()
         return jsonify({'sucesso': False, 'erro': f'Ocorreu um erro ao atualizar o status: {str(e)}'}), 500
 
-# --- Rotas de Placeholder (mantenha se você as tiver em outros arquivos ou precisar delas) ---
+# --- NOVO ENDPOINT PARA GERAR/VISUALIZAR API KEY (para uso administrativo/do próprio usuário) ---
+# ATENÇÃO: Em um ambiente de produção, esta rota deveria ser restrita a administradores
+# ou ao próprio usuário logado para gerenciar sua própria chave.
+@app.route('/user/<int:user_id>/manage_esp32_key', methods=['GET', 'POST'])
+@login_required # Apenas usuários logados podem acessar
+def manage_esp32_key(user_id):
+    # Verificação de segurança: O usuário logado só pode gerenciar sua própria chave
+    # Ou, se for um admin, pode gerenciar a chave de qualquer um.
+    # Por simplicidade, vamos permitir que o usuário logado veja/gere sua própria chave.
+    # Para gerenciar chaves de outros usuários, você precisaria de um sistema de roles (admin).
+    if current_user.id != user_id:
+        flash('Você não tem permissão para gerenciar a chave de API deste usuário.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    user = db.session.get(Usuario, user_id)
+    if not user:
+        flash('Usuário não encontrado.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'generate':
+            user.esp32_api_key = secrets.token_urlsafe(32) # Gera uma chave de 32 bytes (aprox. 43 caracteres)
+            db.session.commit()
+            flash('Nova chave de API para ESP32 gerada com sucesso!', 'success')
+        elif action == 'revoke':
+            user.esp32_api_key = None
+            db.session.commit()
+            flash('Chave de API para ESP32 revogada com sucesso!', 'info')
+        return redirect(url_for('manage_esp32_key', user_id=user.id))
+
+    return render_template('manage_esp32_key.html', user=user)
+
+
+# --- ENDPOINT DA ESP32 (AGORA AUTENTICADO POR API KEY) ---
+@app.route('/api/esp32/status_rega', methods=['GET'])
+def esp32_status_rega():
+    # Obtém a chave de API do cabeçalho 'X-API-Key'
+    api_key = request.headers.get('X-API-Key')
+
+    if not api_key:
+        app.logger.warning("Tentativa de acesso ao endpoint ESP32 sem API Key.")
+        return jsonify({'regar': False, 'error': 'API Key ausente.'}), 401 # Unauthorized
+
+    # Procura o usuário pela chave de API
+    user = Usuario.query.filter_by(esp32_api_key=api_key).first()
+
+    if not user:
+        app.logger.warning(f"Tentativa de acesso ao endpoint ESP32 com API Key inválida: {api_key[:5]}...")
+        return jsonify({'regar': False, 'error': 'API Key inválida.'}), 401 # Unauthorized
+
+    # Usar o horário UTC para evitar problemas de fuso horário entre servidor e ESP32
+    current_utc_time = datetime.utcnow()
+    current_day_of_week = current_utc_time.strftime('%a') # Ex: 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'
+
+    # Consulta todos os horários ativos para o usuário encontrado pela API Key
+    active_schedules = Horario.query.filter_by(
+        usuario_id=user.id, # Usa o ID do usuário autenticado pela API Key
+        ativo=True
+    ).all()
+
+    should_water = False
+    for schedule in active_schedules:
+        scheduled_days = schedule.dias_semana.split(',')
+        # Mapeia os dias da semana para o formato 'Mon', 'Tue', etc.
+        # O formato no banco de dados é "Seg,Ter,Qua", então precisamos mapear
+        # Ou, idealmente, armazenar no banco de dados já no formato 'Mon', 'Tue'
+        # Por enquanto, vamos fazer um mapeamento simples para o português
+        day_map = {
+            'Seg': 'Mon', 'Ter': 'Tue', 'Qua': 'Wed', 'Qui': 'Thu', 
+            'Sex': 'Fri', 'Sab': 'Sat', 'Dom': 'Sun'
+        }
+        # Verifica se o dia atual (em inglês) está na lista de dias do horário (em português)
+        if current_day_of_week in [day_map.get(d, '') for d in scheduled_days]:
+            dummy_date = current_utc_time.date()
+
+            schedule_start_dt = datetime.combine(dummy_date, schedule.hora)
+            schedule_end_dt = schedule_start_dt + timedelta(minutes=schedule.duracao)
+
+            if schedule_start_dt <= current_utc_time and current_utc_time < schedule_end_dt:
+                should_water = True
+                break
+
+    return jsonify({"regar": should_water})
+
+# --- Rotas de Placeholder ---
 @app.route('/esp32_status')
 @login_required
 def esp32_status():
-    return render_template('esp32_status.html')
+    # Esta rota pode ser usada para exibir o status da ESP32 no dashboard,
+    # ou para linkar para a página de gerenciamento da chave de API.
+    # Por exemplo, você pode passar a chave de API do usuário logado para o template.
+    return render_template('esp32_status.html', esp32_api_key=current_user.esp32_api_key)
 
 @app.route('/leitura_gabaritos')
 @login_required
@@ -320,8 +393,4 @@ def api_horarios():
 
 # --- Execução da Aplicação ---
 if __name__ == '__main__':
-    # Comentado para usar Flask-Migrate para gerenciamento de esquema
-    # Se você ainda não executou 'flask db upgrade', faça-o!
-    # with app.app_context():
-    #     db.create_all()
     app.run(debug=True)

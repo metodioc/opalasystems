@@ -1,0 +1,67 @@
+<!-- templates/manage_esp32_key.html -->
+{% extends "base.html" %}
+
+{% block title %}Gerenciar Chave ESP32{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">Gerenciar Chave de API para ESP32 - {{ user.nome }}</h4>
+                </div>
+                <div class="card-body">
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                                    {{ message }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+
+                    <p>Aqui você pode gerar ou revogar a chave de API que sua placa ESP32 usará para se comunicar com o servidor e obter os horários de rega.</p>
+
+                    {% if user.esp32_api_key %}
+                        <div class="mb-3">
+                            <label for="apiKey" class="form-label">Sua Chave de API atual:</label>
+                            <div class="input-group">
+                                <input type="text" id="apiKey" class="form-control" value="{{ user.esp32_api_key }}" readonly>
+                                <button class="btn btn-outline-secondary" type="button" onclick="copyApiKey()">Copiar</button>
+                            </div>
+                            <small class="form-text text-muted">Copie esta chave e insira-a no código da sua ESP32.</small>
+                        </div>
+                        <form action="{{ url_for('manage_esp32_key', user_id=user.id) }}" method="POST" class="d-inline">
+                            <input type="hidden" name="action" value="generate">
+                            <button type="submit" class="btn btn-warning me-2">Gerar Nova Chave</button>
+                        </form>
+                        <form action="{{ url_for('manage_esp32_key', user_id=user.id) }}" method="POST" class="d-inline">
+                            <input type="hidden" name="action" value="revoke">
+                            <button type="submit" class="btn btn-danger">Revogar Chave</button>
+                        </form>
+                    {% else %}
+                        <p class="alert alert-info">Nenhuma chave de API para ESP32 está configurada para este usuário.</p>
+                        <form action="{{ url_for('manage_esp32_key', user_id=user.id) }}" method="POST">
+                            <input type="hidden" name="action" value="generate">
+                            <button type="submit" class="btn btn-success">Gerar Chave de API para ESP32</button>
+                        </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function copyApiKey() {
+        var copyText = document.getElementById("apiKey");
+        copyText.select();
+        copyText.setSelectionRange(0, 99999); // For mobile devices
+        document.execCommand("copy");
+        alert("Chave de API copiada para a área de transferência!");
+    }
+</script>
+{% endblock %}
