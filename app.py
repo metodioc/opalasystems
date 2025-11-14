@@ -6,6 +6,11 @@ from flask_bcrypt import Bcrypt
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_migrate import Migrate # Para gerenciar migrações de banco de dados
 from sqlalchemy import func # NOVO: Importar func para funções de agregação como SUM
+from dotenv import load_dotenv # NOVO: Importar load_dotenv para carregar variáveis do .env
+
+# Carrega as variáveis de ambiente do arquivo .env
+# Isso garante que SECRET_KEY, DATABASE_URL e CODIGO_CONVITE sejam lidos
+load_dotenv()
 
 # --- Configuração do Aplicativo Flask ---
 app = Flask(__name__)
@@ -24,7 +29,6 @@ login_manager.login_message_category = 'info' # Categoria da mensagem flash para
 migrate = Migrate(app, db) # Inicializa o Flask-Migrate
 
 # --- Modelos de Banco de Dados ---
-
 # Modelo de Usuário
 class Usuario(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
@@ -65,7 +69,6 @@ class Horario(db.Model):
     dias_semana = db.Column(db.String(50), nullable=False) # Ex: "Seg,Ter,Qua"
     ativo = db.Column(db.Boolean, default=True)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
-
     # Relacionamento com o modelo Usuario
     usuario = db.relationship('Usuario', backref=db.backref('horarios', lazy=True))
 
@@ -79,7 +82,6 @@ def load_user(user_id):
     return db.session.get(Usuario, int(user_id))
 
 # --- Rotas da Aplicação ---
-
 @app.route('/')
 def index():
     if current_user.is_authenticated:
@@ -93,22 +95,38 @@ def register():
     if request.method == 'POST':
         nome = request.form.get('nome')
         email = request.form.get('email')
-        password = request.form.get('password')
-        confirm_password = request.form.get('confirm_password')
+        # CORREÇÃO AQUI: Use 'senha' e 'confirmar_senha' para corresponder ao HTML
+        password = request.form.get('senha')
+        confirm_password = request.form.get('confirmar_senha')
 
-        if not nome or not email or not password or not confirm_password:
+        # ADIÇÃO AQUI: Obter o código de convite do formulário
+        invite_code_submitted = request.form.get('codigo')
+
+        # CORREÇÃO AQUI: Incluir invite_code_submitted na validação de campos vazios
+        if not nome or not email or not password or not confirm_password or not invite_code_submitted:
             flash('Por favor, preencha todos os campos.', 'danger')
-            return render_template('register.html')
+            return render_template('register.html', nome=nome, email=email, codigo=invite_code_submitted) # Passa os dados para manter no formulário
+
+        # ADIÇÃO AQUI: Obter o código de convite do ambiente
+        expected_invite_code = os.getenv('CODIGO_CONVITE')
+
+        # ADIÇÃO AQUI: Validação do código de convite
+        # Verifica se o código de convite está configurado e se o enviado corresponde
+        if not expected_invite_code or invite_code_submitted != expected_invite_code:
+            flash('Código de convite inválido.', 'danger')
+            return render_template('register.html', nome=nome, email=email, codigo=invite_code_submitted) # Passa os dados para manter no formulário
 
         if password != confirm_password:
             flash('As senhas não coincidem.', 'danger')
-            return render_template('register.html', nome=nome, email=email)
+            return render_template('register.html', nome=nome, email=email, codigo=invite_code_submitted) # Passa os dados para manter no formulário
 
+        # Validação de email existente
         existing_user = Usuario.query.filter_by(email=email).first()
         if existing_user:
             flash('Este e-mail já está cadastrado. Por favor, use outro.', 'danger')
-            return render_template('register.html', nome=nome, email=email)
+            return render_template('register.html', nome=nome, email=email, codigo=invite_code_submitted) # Passa os dados para manter no formulário
 
+        # Se tudo estiver OK, cria o novo usuário
         new_user = Usuario(nome=nome, email=email)
         new_user.set_password(password)
         db.session.add(new_user)
@@ -123,12 +141,10 @@ def login():
         return redirect(url_for('dashboard'))
     if request.method == 'POST':
         email = request.form.get('email')
-        password = request.form.get('password')
-
+        password = request.form.get('password') # Aqui o nome 'password' está correto, pois o formulário de login deve usar 'password'
         if not email or not password:
             flash('Por favor, preencha o e-mail e a senha.', 'danger')
             return render_template('login.html')
-
         usuario = Usuario.query.filter_by(email=email).first()
         if usuario and usuario.check_password(password):
             login_user(usuario)
@@ -154,17 +170,13 @@ def dashboard():
         usuario_id=current_user.id,
         ativo=True
     ).scalar()
-
     # Se não houver horários ativos, a soma pode retornar None, então definimos como 0
     total_duracao_minutos = total_duracao_minutos if total_duracao_minutos is not None else 0
-
     # Você pode querer passar também os horários ativos para exibir no dashboard
     horarios_ativos = Horario.query.filter_by(usuario_id=current_user.id, ativo=True).order_by(Horario.hora).all()
-
     return render_template('dashboard.html', 
-                           duracao=total_duracao_minutos,
-                           horarios_ativos=horarios_ativos)
-
+                            duracao=total_duracao_minutos,
+                            horarios_ativos=horarios_ativos)
 
 @app.route('/horarios')
 @login_required
@@ -178,18 +190,14 @@ def adicionar_horario():
     data = request.get_json()
     if not data:
         return jsonify({'sucesso': False, 'erro': 'Dados inválidos.'}), 400
-
     try:
         hora_str = data.get('hora')
         duracao = data.get('duracao')
         dias_semana = data.get('dias')
-
         if not hora_str or not duracao or not dias_semana:
             return jsonify({'sucesso': False, 'erro': 'Todos os campos são obrigatórios.'}), 400
-
         hora = datetime.strptime(hora_str, '%H:%M').time()
         duracao = int(duracao)
-
         novo_horario = Horario(
             hora=hora,
             duracao=duracao,
@@ -215,25 +223,20 @@ def editar_horario(horario_id):
     if not horario:
         flash('Horário não encontrado.', 'danger')
         return redirect(url_for('horarios'))
-
     if horario.usuario_id != current_user.id:
         flash('Você não tem permissão para editar este horário.', 'danger')
         return redirect(url_for('horarios'))
-
     if request.method == 'POST':
         try:
             hora_str = request.form.get('hora')
             duracao = request.form.get('duracao')
             dias_semana_list = request.form.getlist('dias')
-
             if not hora_str or not duracao or not dias_semana_list:
                 flash('Por favor, preencha todos os campos.', 'danger')
                 return redirect(url_for('editar_horario', horario_id=horario.id))
-
             horario.hora = datetime.strptime(hora_str, '%H:%M').time()
             horario.duracao = int(duracao)
             horario.dias_semana = ",".join(dias_semana_list)
-
             db.session.commit()
             flash('Horário de rega atualizado com sucesso!', 'success')
             return redirect(url_for('horarios'))
@@ -245,7 +248,6 @@ def editar_horario(horario_id):
             db.session.rollback()
             flash(f'Ocorreu um erro ao atualizar o horário: {str(e)}', 'danger')
             return redirect(url_for('editar_horario', horario_id=horario.id))
-
     dias_selecionados = horario.dias_semana.split(',')
     return render_template('editar_horario.html', horario=horario, dias_selecionados=dias_selecionados)
 
@@ -255,10 +257,8 @@ def deletar_horario(horario_id):
     horario = db.session.get(Horario, horario_id) # Usando db.session.get()
     if not horario:
         return jsonify({'sucesso': False, 'erro': 'Horário não encontrado.'}), 404
-
     if horario.usuario_id != current_user.id:
         return jsonify({'sucesso': False, 'erro': 'Você não tem permissão para deletar este horário.'}), 403
-
     try:
         db.session.delete(horario)
         db.session.commit()
@@ -274,14 +274,11 @@ def ativar_horario(horario_id):
     horario = db.session.get(Horario, horario_id) # Usando db.session.get()
     if not horario:
         return jsonify({'sucesso': False, 'erro': 'Horário não encontrado.'}), 404
-
     if horario.usuario_id != current_user.id:
         return jsonify({'sucesso': False, 'erro': 'Você não tem permissão para alterar este horário.'}), 403
-
     data = request.get_json()
     if not data or 'ativo' not in data:
         return jsonify({'sucesso': False, 'erro': 'Dados inválidos.'}), 400
-
     try:
         horario.ativo = bool(data['ativo'])
         db.session.commit()
@@ -320,7 +317,6 @@ def api_horarios():
             'dias_semana': h.dias_semana.split(',')
         })
     return jsonify(horarios_data)
-
 
 # --- Execução da Aplicação ---
 if __name__ == '__main__':
